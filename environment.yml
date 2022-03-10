@@ -9,7 +9,7 @@
 # Website: avalanche.continualai.org                                           #
 ################################################################################
 
-name: clvision22-challenge
+name: clvision
 channels:
 - conda-forge
 - pytorch

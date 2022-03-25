@@ -15,6 +15,8 @@ channels:
 - pytorch
 dependencies:
 - psutil
+# added mamba
+- mamba
 - conda-forge::gputil
 - scikit-learn
 - matplotlib

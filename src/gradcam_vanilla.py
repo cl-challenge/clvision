@@ -134,6 +134,8 @@ for i in range(512):
 heatmap = torch.mean(activations, dim=1).squeeze()
 
 # relu on top of the heatmap
+# 그냥 쓰게되면, 음수 값이 큰 값들이 같이 표시되어서 보기 안좋음.
+# -relu(x) 하게 된다면 inverse heat map? cold map? 확인 가능.
 # expression (2) in https://arxiv.org/pdf/1610.02391.pdf
 heatmap = np.maximum(heatmap, 0)
 

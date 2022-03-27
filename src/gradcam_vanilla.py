@@ -188,8 +188,44 @@ def vgg_last_layer_heatmap(img):
 
 img, _ = next(iter(dataloader))
 heatmap = vgg_last_layer_heatmap(img)
-plt.matshow(heatmap.squeeze())
-plt.savefig("original.png")
-heatmap_rot90 = cu.heatmap_rotation(heatmap,1,True)
+#plt.matshow(heatmap.squeeze())
+#plt.savefig("original_img.png")
+
+img2 = cu.img_rotation(img, 90.0)
+heatmap2 = vgg_last_layer_heatmap(img2)
+plt.imshow(img2.squeeze().permute(1, 2, 0))
+plt.savefig("rot_img.png")
+heatmap_rot90 = cu.heatmap_rotation(heatmap2,1,True)
 plt.matshow(heatmap_rot90.squeeze())
 plt.savefig("rot90.png")
+
+print(heatmap.shape)
+print(heatmap.size())
+print(heatmap.size(dim=1))
+print(heatmap.size(dim=0))
+
+#zero exist in heatmap
+for x in np.arange(heatmap.size(dim=1)):
+    for y in np.arange(heatmap.size(dim=1)):
+        # p*log(p/q)
+        if(heatmap[x,y] == 0.0):
+            print("zero exist")
+
+# add small value
+# to prevent divide by zero error
+heatmap = torch.add(heatmap,0.01)
+heatmap2 = torch.add(heatmap,0.01)
+
+div_mat = torch.div(heatmap,heatmap2)
+print(div_mat.shape)
+# KLD(p,q) = sum(p,log(p/q))
+kld_mat = torch.mul(heatmap,torch.log(div_mat))
+print(kld_mat.shape)
+# https://mathoverflow.net/questions/72668/how-to-compute-kl-divergence-when-pmf-contains-0s
+print('KLD(p,q): ',torch.sum(kld_mat).item() )
+
+div_mat_same = torch.div(heatmap,heatmap)
+kld_same = torch.mul(heatmap,torch.log(div_mat_same))
+print('KLD(p,p) == 0:', torch.sum(kld_same).item() )
+
+

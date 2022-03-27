@@ -76,3 +76,9 @@ def heatmap_rotation(hmap, num, clockwise=False):
     heatmap_rot90 = torch.rot90(hmap,rotate_val,[0,1])
     
     return heatmap_rot90
+
+def grad_cam_KLD(hmap_original, hmap_rotated):
+    '''
+    KLD for two grad_cam heatmaps
+    heatmap : torch.size([n,n])
+    '''

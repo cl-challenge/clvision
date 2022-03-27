@@ -80,71 +80,116 @@ class VGG_pretrained(nn.Module):
     def get_activations(self, x):
         return self.features_conv(x)
 
+def gradcam_vanilla_tutorial():
+    '''
+    tutorial for original grad-cam
+    '''
+    # initialize the VGG model
+    vgg = VGG_pretrained()
 
-# initialize the VGG model
-vgg = VGG_pretrained()
+    # 원래 vgg19 layer 모양 확인.
+    # (35): ReLU(inplace=True) 까지 포함되도록 절단.
+    print("=======original VGG shape============")
+    print(vgg.vgg)
 
-# 원래 vgg19 layer 모양 확인.
-# (35): ReLU(inplace=True) 까지 포함되도록 절단.
-print("=======original VGG shape============")
-print(vgg.vgg)
+    # __init__() 안에 있는 vgg.feature_conv 통해서
+    # 절단된 vgg19 network 확인 가능.
+    print("=======[:36] 절단된 VGG============")
+    print(vgg.features_conv)
 
-# __init__() 안에 있는 vgg.feature_conv 통해서
-# 절단된 vgg19 network 확인 가능.
-print("=======[:36] 절단된 VGG============")
-print(vgg.features_conv)
+    # set the evaluation mode
+    vgg.eval()
 
-# set the evaluation mode
-vgg.eval()
+    # get the image from the dataloader
+    img, _ = next(iter(dataloader))
+    print('img shape: ', img.shape)
 
-# get the image from the dataloader
+    # 1000개 class에 대한 예측치 전부.
+    pred = vgg(img)
+    print('Pred shape: ',pred.shape)
+    # get the most likely prediction of the model
+    predicted = vgg(img).argmax(dim=1)
+    print('Predicted shape: ',predicted)
+
+    #print(pred.shape)
+
+    # get the gradient of the output with respect to the parameters of the model
+    # argmax를 통해 가장 가능성 높다고 판별한 logit's index 획득,
+    # 그 logit에 대해서 backward() 진행, gradient 획득.
+    pred[:, predicted].backward()
+
+    # pull the gradients out of the model
+    gradients = vgg.get_activations_gradient()
+    print('Gradients shape: ',gradients.shape)
+
+    # pool the gradients across the channels
+    pooled_gradients = torch.mean(gradients, dim=[0, 2, 3])
+    print('Pooled gradient shape: ', pooled_gradients.shape)
+
+    # get the activations of the last convolutional layer
+    activations = vgg.get_activations(img).detach()
+    print('last layer activation shape: ', activations.shape)
+
+    # weight the channels by corresponding gradients
+    for i in range(512):
+        activations[:, i, :, :] *= pooled_gradients[i]
+
+    # average the channels of the activations
+    heatmap = torch.mean(activations, dim=1).squeeze()
+
+    # relu on top of the heatmap``
+    # 그냥 쓰게되면, 음수 값이 큰 값들이 같이 표시되어서 보기 안좋음.
+    # -relu(x) 하게 된다면 inverse heat map? cold map? 확인 가능.
+    # expression (2) in https://arxiv.org/pdf/1610.02391.pdf
+    heatmap = np.maximum(heatmap, 0)
+
+    # normalize the heatmap
+    heatmap /= torch.max(heatmap)
+
+    print('heatmap shape: ', heatmap.shape)
+
+    # draw the heatmap
+    cu.generate_heatmap_png(img, heatmap, "elephant_rotated")
+
+
+def vgg_last_layer_heatmap(img):
+    '''
+    generate heatmap for VGG19's last layer activation
+    input : img from data loader
+    img shape: [1,3,224,224]
+    '''
+    vgg = VGG_pretrained()
+
+    vgg.eval()
+
+    pred = vgg(img)
+    predicted = vgg(img).argmax(dim=1)
+
+    pred[:, predicted].backward()
+
+    gradients = vgg.get_activations_gradient()
+
+    pooled_gradients = torch.mean(gradients, dim=[0, 2, 3])
+    activations = vgg.get_activations(img).detach()
+
+    # weight the channels by corresponding gradients
+    for i in range(512):
+        activations[:, i, :, :] *= pooled_gradients[i]
+
+    # average the channels of the activations
+    heatmap = torch.mean(activations, dim=1).squeeze()
+
+    heatmap = np.maximum(heatmap, 0)
+
+    heatmap /= torch.max(heatmap)
+
+    return heatmap
+
+
 img, _ = next(iter(dataloader))
-
-# 1000개 class에 대한 예측치 전부.
-pred = vgg(img)
-print('Pred shape: ',pred.shape)
-# get the most likely prediction of the model
-predicted = vgg(img).argmax(dim=1)
-print('Predicted shape: ',predicted)
-
-#print(pred.shape)
-
-# get the gradient of the output with respect to the parameters of the model
-# argmax를 통해 가장 가능성 높다고 판별한 logit's index 획득,
-# 그 logit에 대해서 backward() 진행, gradient 획득.
-pred[:, predicted].backward()
-
-# pull the gradients out of the model
-gradients = vgg.get_activations_gradient()
-print('Gradients shape: ',gradients.shape)
-
-# pool the gradients across the channels
-pooled_gradients = torch.mean(gradients, dim=[0, 2, 3])
-print('Pooled gradient shape: ', pooled_gradients.shape)
-
-# get the activations of the last convolutional layer
-activations = vgg.get_activations(img).detach()
-print('last layer activation shape: ', activations.shape)
-
-# weight the channels by corresponding gradients
-for i in range(512):
-    activations[:, i, :, :] *= pooled_gradients[i]
-
-# average the channels of the activations
-heatmap = torch.mean(activations, dim=1).squeeze()
-
-# relu on top of the heatmap
-# 그냥 쓰게되면, 음수 값이 큰 값들이 같이 표시되어서 보기 안좋음.
-# -relu(x) 하게 된다면 inverse heat map? cold map? 확인 가능.
-# expression (2) in https://arxiv.org/pdf/1610.02391.pdf
-heatmap = np.maximum(heatmap, 0)
-
-# normalize the heatmap
-heatmap /= torch.max(heatmap)
-
-print('heatmap shape: ', heatmap.shape)
-
-# draw the heatmap
-cu.generate_heatmap_png(img, heatmap, "elephant")
-
-
+heatmap = vgg_last_layer_heatmap(img)
+plt.matshow(heatmap.squeeze())
+plt.savefig("original.png")
+heatmap_rot90 = cu.heatmap_rotation(heatmap,1,True)
+plt.matshow(heatmap_rot90.squeeze())
+plt.savefig("rot90.png")

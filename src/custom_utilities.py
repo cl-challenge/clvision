@@ -1,4 +1,5 @@
 import torch
+import torchvision
 import torch.nn as nn
 from torch.utils import data
 from torchvision.models import vgg19
@@ -47,3 +48,31 @@ def generate_heatmap_png(img, heatmap, class_name=None):
         plt.savefig("final_heatmap_overlay.png")
     else:
         plt.savefig("final_heatmap_overlay_{}.png".format(class_name))
+
+def img_rotation(img, degree):
+    '''
+    img : PIL Image or Tensor
+    degree : float
+    
+    return rotated image
+    '''
+    rotated_img = torchvision.transforms.functional.rotate(img, degree)
+    return rotated_img
+
+def heatmap_rotation(hmap, num, clockwise=False):
+    '''
+    hmap : torch.size([n,n])
+    num : number of 90deg rotations
+    clockwise : default as false.
+    '''
+    rotate_val = 0
+    if(clockwise):
+        rotate_val = -1
+    else:
+        rotate_val = 1
+    
+    rotate_val *= num
+    
+    heatmap_rot90 = torch.rot90(hmap,rotate_val,[0,1])
+    
+    return heatmap_rot90

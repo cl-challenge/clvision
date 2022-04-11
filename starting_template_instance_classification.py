@@ -44,25 +44,19 @@ from avalanche.benchmarks.utils import Compose
 from avalanche.core import SupervisedPlugin
 from avalanche.evaluation.metrics import accuracy_metrics, loss_metrics, \
     timing_metrics
-from avalanche.logging import InteractiveLogger, TensorboardLogger
+from avalanche.logging import InteractiveLogger, TensorboardLogger, WandBLogger, TextLogger
 from avalanche.models import SimpleMLP
-from avalanche.training.plugins import EvaluationPlugin
+from avalanche.training.plugins import EvaluationPlugin, ReplayPlugin, EWCPlugin
 from avalanche.training.supervised import Naive
 from devkit_tools.benchmarks import challenge_classification_benchmark
 from devkit_tools.metrics.classification_output_exporter import \
     ClassificationOutputExporter
-
-# TODO: change this to the path where you downloaded (and extracted) the dataset
-DATASET_PATH = Path.home() / '3rd_clvision_challenge' / 'challenge'
+from utils import *
 
 
 def main(args):
     # --- CONFIG
-    device = torch.device(
-        f"cuda:{args.cuda}"
-        if args.cuda >= 0 and torch.cuda.is_available()
-        else "cpu"
-    )
+    device = torch.device("cuda" if args.gpu >= 0 and torch.cuda.is_available() else "cpu")
     # ---------
 
     # --- TRANSFORMATIONS
@@ -87,7 +81,7 @@ def main(args):
 
     # --- BENCHMARK CREATION
     benchmark = challenge_classification_benchmark(
-        dataset_path=DATASET_PATH,
+        dataset_path=args.data_path,
         train_transform=train_transform,
         eval_transform=eval_transform,
         n_validation_videos=0
@@ -113,7 +107,8 @@ def main(args):
             benchmark, save_folder='./instance_classification_results')
     ]
     plugins: List[SupervisedPlugin] = [
-        # ...
+        ReplayPlugin(mem_size=100),
+        EWCPlugin(ewc_lambda=0.001)
     ] + mandatory_plugins
     # ---------
 
@@ -135,7 +130,12 @@ def main(args):
         loggers=[InteractiveLogger(),
                  TensorboardLogger(
                      tb_log_dir='./log/track_inst_cls/exp_' +
-                                datetime.datetime.now().isoformat())
+                                datetime.datetime.now().isoformat()),
+                 WandBLogger(project_name='clvision-v1', run_name='track_inst_cls_'+
+                             datetime.datetime.now().isoformat()),
+                 TextLogger(open('./results/txtlog/'+
+                                 datetime.datetime.now().isoformat(), 'a'))
+
                  ],
     )
     # ---------
@@ -156,6 +156,7 @@ def main(args):
     #  In particular, you can create a subclass of the SupervisedTemplate
     #  (Naive is mostly an alias for the SupervisedTemplate) and override only
     #  the methods required to implement your solution.
+    #todo add scheduler (multistep lr)
     cl_strategy = Naive(
         model,
         SGD(model.parameters(), lr=0.001, momentum=0.9),
@@ -205,11 +206,12 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--cuda",
-        type=int,
-        default=0,
-        help="Select zero-indexed cuda device. -1 to use CPU.",
-    )
+    parser.add_argument('--data_path', type=str, default='/home/miil/Dataset/clvision')
+    parser.add_argument('--gpu', default='0,1')
+    parser.add_argument('--seed', default=1)
+    parser.add_argument('--epoch', type=int, default=10)
     args = parser.parse_args()
+    set_seed(args.seed)
+    args.gpu = set_gpu(args)
+
     main(args)

@@ -51,14 +51,9 @@ from avalanche.training.supervised import Naive
 from devkit_tools.benchmarks import challenge_classification_benchmark
 from devkit_tools.metrics.classification_output_exporter import \
     ClassificationOutputExporter
-from utils import *
-
+from utils.utils import *
 
 def main(args):
-    # --- CONFIG
-    device = torch.device("cuda" if args.gpu >= 0 and torch.cuda.is_available() else "cpu")
-    # ---------
-
     # --- TRANSFORMATIONS
     # This is the normalization used in torchvision models
     # https://pytorch.org/vision/stable/models.html
@@ -107,8 +102,8 @@ def main(args):
             benchmark, save_folder='./instance_classification_results')
     ]
     plugins: List[SupervisedPlugin] = [
-        ReplayPlugin(mem_size=100),
-        EWCPlugin(ewc_lambda=0.001)
+        ReplayPlugin(mem_size=args.mem_size),
+        EWCPlugin(ewc_lambda=args.ewc_lambda)
     ] + mandatory_plugins
     # ---------
 
@@ -161,10 +156,10 @@ def main(args):
         model,
         SGD(model.parameters(), lr=0.001, momentum=0.9),
         CrossEntropyLoss(),
-        train_mb_size=100,
-        train_epochs=4,
-        eval_mb_size=100,
-        device=device,
+        train_mb_size=args.train_batch,
+        train_epochs=args.epoch,
+        eval_mb_size=args.test_batch,
+        device=args.device,
         plugins=plugins,
         evaluator=evaluator,
         eval_every=0 if 'valid' in benchmark.streams else -1
@@ -207,9 +202,9 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_path', type=str, default='/home/miil/Dataset/clvision')
-    parser.add_argument('--gpu', default='0,1')
+    parser.add_argument('--gpu', default='0')
     parser.add_argument('--seed', default=1)
-    parser.add_argument('--epoch', type=int, default=10)
+    parser.add_argument('--epoch', type=int, default=100)
     args = parser.parse_args()
     set_seed(args.seed)
     args.gpu = set_gpu(args)

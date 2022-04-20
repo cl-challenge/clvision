@@ -8,13 +8,15 @@ def get_command_line_parser():
     # benchmark parameter
     # ------------------------------------------------
     parser.add_argument('--data_path', type=str, default='/home/miil/Dataset/clvision')
-    parser.add_argument('--exp', type=int, default=1, choices=[1, 2, 3], help='which track')
-    parser.add_argument('--models', type=str, default='resnet34', help='model name for calling timm')
+    parser.add_argument('--exp', type=int, default=1, choices=[1, 2, 3], help='which track run')
+    parser.add_argument('--model', type=str, default='resnet34', help='model name for calling timm')
     parser.add_argument('--use_pretrain', type=str2bool, default=True)
 
     # instance classification parameter
     # ------------------------------------------------
     parser.add_argument('--epoch', type=int, default=20)
+    parser.add_argument('--optim', type=str, default='SGD')
+    parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--train_batch', type=int, default=100)
     parser.add_argument('--test_batch', type=int, default=100)
     parser.add_argument('--ewc_lambda', type=float, default=0.001)
@@ -24,6 +26,7 @@ def get_command_line_parser():
     # ------------------------------------------------
     parser.add_argument('--gpu', default='0')
     parser.add_argument('--seed', default=1)
+    parser.add_argument('--memo', default=None, help='memo for experiment explanation')
 
     return parser
 

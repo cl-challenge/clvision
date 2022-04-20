@@ -89,7 +89,6 @@ def main(args):
         num_classes=benchmark.n_classes)
     # ---------
 
-    # TODO: Naive == plain fine tuning without replay, regularization, etc.
     # For the challenge, you'll have to implement your own strategy (or a
     # strategy plugin that changes the behaviour of the SupervisedTemplate)
 
@@ -198,15 +197,3 @@ def main(args):
         cl_strategy.eval(benchmark.test_stream, num_workers=10,
                          persistent_workers=True)
 
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--data_path', type=str, default='/home/miil/Dataset/clvision')
-    parser.add_argument('--gpu', default='0')
-    parser.add_argument('--seed', default=1)
-    parser.add_argument('--epoch', type=int, default=100)
-    args = parser.parse_args()
-    set_seed(args.seed)
-    args.gpu = set_gpu(args)
-
-    main(args)

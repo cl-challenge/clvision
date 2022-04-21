@@ -29,12 +29,13 @@ The template is organized as follows:
     please make sure you are able to export the output in the expected format.
 """
 
-import argparse
 import datetime
+import time
 from pathlib import Path
 from typing import List
 
 import torch
+import torchvision.models
 from torch.nn import CrossEntropyLoss
 from torch.optim import SGD
 from torchvision import transforms
@@ -45,12 +46,12 @@ from avalanche.core import SupervisedPlugin
 from avalanche.evaluation.metrics import accuracy_metrics, loss_metrics, \
     timing_metrics
 from avalanche.logging import InteractiveLogger, TensorboardLogger, WandBLogger, TextLogger
-from avalanche.models import SimpleMLP
 from avalanche.training.plugins import EvaluationPlugin, ReplayPlugin, EWCPlugin
 from avalanche.training.supervised import Naive
 from devkit_tools.benchmarks import challenge_classification_benchmark
 from devkit_tools.metrics.classification_output_exporter import \
     ClassificationOutputExporter
+
 from utils.utils import *
 
 def main(args):
@@ -83,10 +84,13 @@ def main(args):
     )
     # ---------
 
+    # --- exp name
+    name = exp_name(args)
+    # ---------
+
     # --- MODEL CREATION
-    model = SimpleMLP(
-        input_size=3*224*224,
-        num_classes=benchmark.n_classes)
+    model = torchvision.models.resnet34(pretrained=True)
+    model.fc = torch.nn.Linear(512, out_features=benchmark.n_classes)
     # ---------
 
     # For the challenge, you'll have to implement your own strategy (or a
@@ -96,9 +100,10 @@ def main(args):
     # Avalanche already has a lot of plugins you can use!
     # Many mainstream continual learning approaches are available as plugins:
     # https://avalanche-api.continualai.org/en/latest/training.html#training-plugins
+    ensure_path('./results/instance_classification_results/{}'.format(name))
     mandatory_plugins = [
         ClassificationOutputExporter(
-            benchmark, save_folder='./instance_classification_results')
+            benchmark, save_folder='./results/instance_classification_results/{}'.format(name))
     ]
     plugins: List[SupervisedPlugin] = [
         ReplayPlugin(mem_size=args.mem_size),
@@ -123,12 +128,11 @@ def main(args):
         ),
         loggers=[InteractiveLogger(),
                  TensorboardLogger(
-                     tb_log_dir='./log/track_inst_cls/exp_' +
+                     tb_log_dir='./results/tblog/track_inst_cls/exp_' +
                                 datetime.datetime.now().isoformat()),
-                 WandBLogger(project_name='clvision-v1', run_name='track_inst_cls_'+
-                             datetime.datetime.now().isoformat()),
-                 TextLogger(open('./results/txtlog/'+
-                                 datetime.datetime.now().isoformat(), 'a'))
+                 WandBLogger(project_name='clvision-track1', run_name=name, save_code=False, sync_tfboard=True, dir='./results/'),
+                 TextLogger(open('./results/txtlog/'+ name+
+                                 datetime.datetime.now().isoformat() + '.txt', 'a'))
 
                  ],
     )
@@ -151,9 +155,11 @@ def main(args):
     #  (Naive is mostly an alias for the SupervisedTemplate) and override only
     #  the methods required to implement your solution.
     #todo add scheduler (multistep lr)
+    optimizer = SGD(model.parameters(), lr=0.001, momentum=0.9)
+
     cl_strategy = Naive(
         model,
-        SGD(model.parameters(), lr=0.001, momentum=0.9),
+        optimizer,
         CrossEntropyLoss(),
         train_mb_size=args.train_batch,
         train_epochs=args.epoch,
@@ -168,6 +174,7 @@ def main(args):
     # TRAINING LOOP
     print("Starting experiment...")
     for experience in benchmark.train_stream:
+        start_time = time.time()
         current_experience_id = experience.current_experience
         print("Start of experience: ", current_experience_id)
         print("Current Classes: ", experience.classes_in_this_experience)
@@ -192,6 +199,9 @@ def main(args):
                 experience,
                 **data_loader_arguments)
         print("Training completed")
+        print('This task takes %d seconds' % (time.time() - start_time),
+              '\nstill need around %.2f mins to finish this session' % (
+                      (time.time() - start_time) * (14 - current_experience_id) / 60))
 
         print("Computing accuracy on the complete test set")
         cl_strategy.eval(benchmark.test_stream, num_workers=10,

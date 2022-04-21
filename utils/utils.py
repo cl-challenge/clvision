@@ -46,3 +46,19 @@ def ensure_path(path):
     else:
         print('create folder:', path)
         os.makedirs(path)
+
+def exp_name(args):
+    #TODO add plugin or strategy information
+    #TODO add lr scheduler information
+    name = ''
+    name += '{}-'.format(args.model)
+    name += 'Epo_{}-'.format(args.epoch)
+    name += 'Optim_{}-'.format(args.optim)
+    name += 'Lr_{}-'.format(args.lr)
+    name += 'Bs_{}_{}-'.format(args.train_batch, args.test_batch)
+    name += 'Seed_{}-'.format(args.seed)
+
+    if args.memo:
+        name += '{}'.format(args.memo)
+
+    return name

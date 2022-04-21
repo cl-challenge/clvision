@@ -29,8 +29,8 @@ The template is organized as follows:
     please make sure you are able to export the output in the expected format.
 """
 
-import argparse
 import datetime
+import time
 from pathlib import Path
 from typing import List
 
@@ -174,6 +174,7 @@ def main(args):
     # TRAINING LOOP
     print("Starting experiment...")
     for experience in benchmark.train_stream:
+        start_time = time.time()
         current_experience_id = experience.current_experience
         print("Start of experience: ", current_experience_id)
         print("Current Classes: ", experience.classes_in_this_experience)
@@ -198,6 +199,9 @@ def main(args):
                 experience,
                 **data_loader_arguments)
         print("Training completed")
+        print('This task takes %d seconds' % (time.time() - start_time),
+              '\nstill need around %.2f mins to finish this session' % (
+                      (time.time() - start_time) * (14 - current_experience_id) / 60))
 
         print("Computing accuracy on the complete test set")
         cl_strategy.eval(benchmark.test_stream, num_workers=10,

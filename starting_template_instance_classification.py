@@ -33,6 +33,7 @@ import datetime
 import time
 from pathlib import Path
 from typing import List
+import sys
 
 import timm
 import torch
@@ -76,10 +77,8 @@ def main(args):
 
     # --- PLUGINS CREATION  https://avalanche-api.continualai.org/en/latest/training.html#training-plugins
     mandatory_plugins = [ClassificationOutputExporter(benchmark, save_folder=result_path)]
-    plugins: List[SupervisedPlugin] = [
-        ReplayPlugin(mem_size=args.mem_size),
-        EWCPlugin(ewc_lambda=args.ewc_lambda)
-    ] + mandatory_plugins
+    plugin = []
+    plugins = [getattr(sys.modules[__name__], p)(**args.hp_plugin[idx]) for idx, p in enumerate(args.use_plugin)] + mandatory_plugins
 
     # --- METRICS AND LOGGING
     evaluator = EvaluationPlugin(

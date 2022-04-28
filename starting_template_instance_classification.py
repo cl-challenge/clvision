@@ -45,7 +45,7 @@ from avalanche.core import SupervisedPlugin
 from avalanche.evaluation.metrics import accuracy_metrics, loss_metrics, timing_metrics, confusion_matrix_metrics
 from avalanche.logging import InteractiveLogger, TensorboardLogger, WandBLogger, TextLogger
 from avalanche.training.plugins import EvaluationPlugin, ReplayPlugin, EWCPlugin
-from avalanche.training.supervised import Naive
+from avalanche.training.supervised import *
 from devkit_tools.benchmarks import challenge_classification_benchmark
 from devkit_tools.metrics.classification_output_exporter import \
     ClassificationOutputExporter
@@ -78,7 +78,7 @@ def main(args):
     # --- PLUGINS CREATION  https://avalanche-api.continualai.org/en/latest/training.html#training-plugins
     mandatory_plugins = [ClassificationOutputExporter(benchmark, save_folder=result_path)]
     plugin = []
-    plugins = [getattr(sys.modules[__name__], p)(**args.hp_plugin[idx]) for idx, p in enumerate(args.use_plugin)] + mandatory_plugins
+    plugins = [getattr(sys.modules[__name__], p)(**args.hp_plugins[idx]) for idx, p in enumerate(args.plugins)] + mandatory_plugins
 
     # --- METRICS AND LOGGING
     evaluator = EvaluationPlugin(
@@ -88,7 +88,7 @@ def main(args):
         timing_metrics(experience=True, stream=True),
         loggers=[InteractiveLogger(),
                  TensorboardLogger(tb_log_dir='./results/tblog/track_inst_cls/exp_' + datetime.datetime.now().isoformat()),
-                 WandBLogger(project_name='clvision-track1', run_name=name, save_code=False, sync_tfboard=True, dir='./results/'),
+                 WandBLogger(project_name=args.project_name, run_name=name, save_code=False, sync_tfboard=True, dir='./results/'),
                  TextLogger(open('./results/txtlog/'+ name+ datetime.datetime.now().isoformat() + '.txt', 'a'))],)
 
     """
@@ -113,18 +113,14 @@ def main(args):
     #todo add scheduler (multistep lr)
     optimizer = SGD(model.parameters(), lr=0.001, momentum=0.9)
 
-    cl_strategy = Naive( #todo change strategy
-        model,
-        optimizer,
-        CrossEntropyLoss(),
-        train_mb_size=args.train_batch,
-        train_epochs=args.epoch,
-        eval_mb_size=args.test_batch,
-        device=args.device,
-        plugins=plugins,
-        evaluator=evaluator,
-        eval_every=0 if 'valid' in benchmark.streams else -1
-    )
+    eval_tmp = 0 if 'valid' in benchmark.streams else -1
+    strategy_args = {'model': model, 'optimizer': optimizer, 'criterion': CrossEntropyLoss(),
+                     'train_mb_size':args.train_batch, 'train_epochs':args.epoch, 'eval_mb_size':args.test_batch,
+                     'device': args.device, 'plugins': plugins, 'evaluator': evaluator, 'eval_every':eval_tmp}
+    if args.hp_strategy:
+        cl_strategy = getattr(sys.modules[__name__], args.strategy)(**strategy_args, **args.hp_strategy)
+    else:
+        cl_strategy = getattr(sys.modules[__name__], args.strategy)(**strategy_args)
 
     # TRAINING LOOP
     for experience in benchmark.train_stream:

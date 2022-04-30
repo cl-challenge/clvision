@@ -39,7 +39,7 @@ import timm
 import torch
 import torchvision.models
 from torch.nn import CrossEntropyLoss
-from torch.optim import SGD
+from torch.optim import SGD, Adam, Adagrad
 
 from avalanche.core import SupervisedPlugin
 from avalanche.evaluation.metrics import accuracy_metrics, loss_metrics, timing_metrics, confusion_matrix_metrics
@@ -52,6 +52,21 @@ from devkit_tools.metrics.classification_output_exporter import \
 
 from utils.utils import *
 from data import transformation
+
+def get_optimizer(args, model):
+    if args.optim == 'SGD':
+        optimizer = torch.optim.SGD([{'params': model.parameters(), 'lr': args.lr}],
+                                    momentum=0.9, nesterov=True, weight_decay=args.decay)
+    else:
+        raise NotImplementedError
+
+    # if args.schedule == 'Step':
+    #     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step, gamma=args.gamma)
+    # elif args.schedule == 'Milestone':
+    #     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.milestones,
+    #                                                      gamma=args.gamma)
+
+    return optimizer
 
 def main(args):
     # --- TRANSFORMATIONS
@@ -84,7 +99,7 @@ def main(args):
     evaluator = EvaluationPlugin(
         accuracy_metrics(epoch=True, stream=True, experience=True),
         loss_metrics(minibatch=False, epoch_running=True, experience=True),
-        confusion_matrix_metrics(stream=True),
+        confusion_matrix_metrics(stream=True, wandb=True),
         timing_metrics(experience=True, stream=True),
         loggers=[InteractiveLogger(),
                  TensorboardLogger(tb_log_dir='./results/tblog/track_inst_cls/exp_' + datetime.datetime.now().isoformat()),
@@ -110,8 +125,7 @@ def main(args):
     #  the methods required to implement your solution.
     """
 
-    #todo add scheduler (multistep lr)
-    optimizer = SGD(model.parameters(), lr=0.001, momentum=0.9)
+    optimizer = get_optimizer(args, model)
 
     eval_tmp = 0 if 'valid' in benchmark.streams else -1
     strategy_args = {'model': model, 'optimizer': optimizer, 'criterion': CrossEntropyLoss(),
@@ -147,11 +161,13 @@ def main(args):
                 **data_loader_arguments)
 
         print("Training completed")
-        print('This task takes %d seconds' % (time.time() - start_time),
-              '\nstill need around %.2f mins to finish this session' % (
-                      (time.time() - start_time) * (14 - current_experience_id) / 60))
+
 
         print("Computing accuracy on the complete test set")
         cl_strategy.eval(benchmark.test_stream, num_workers=10,
                          persistent_workers=True)
+
+        print('This task takes %d seconds' % (time.time() - start_time),
+              '\nstill need around %.2f mins to finish this session' % (
+                      (time.time() - start_time) * (14 - current_experience_id) / 60))
 

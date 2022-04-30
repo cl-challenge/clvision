@@ -14,20 +14,20 @@ def get_command_line_parser():
 
     # instance classification parameter
     # ------------------------------------------------
-    parser.add_argument('--epoch', type=int, default=100)
+    parser.add_argument('--epoch', type=int, default=10)
     parser.add_argument('--schedule', type=str, default='Step', choices=['Step', 'Milestone'])
     parser.add_argument('--milestones', nargs='+', type=int, default=[60, 70])
     parser.add_argument('--step', type=int, default=40)
-
+    parser.add_argument('--decay', type=float, default=0.0002)
     parser.add_argument('--optim', type=str, default='SGD')
-    parser.add_argument('--lr', type=float, default=0.001)
-    parser.add_argument('--train_batch', type=int, default=100)
-    parser.add_argument('--test_batch', type=int, default=100)
+    parser.add_argument('--lr', type=float, default=0.005)
+    parser.add_argument('--train_batch', type=int, default=256)
+    parser.add_argument('--test_batch', type=int, default=256)
 
     # use avalanche parameter
     # ------------------------------------------------
     parser.add_argument('--plugins', default=['ReplayPlugin', 'EWCPlugin'], help='use exact name for calling plugin in avalanche') # https://avalanche-api.continualai.org/en/latest/training.html#training-plugins
-    parser.add_argument('--hp_plugins', default=[{'mem_size':100}, {'ewc_lambda': 0.001}], help='hyper-parameter for plugin. it\'s len is must same with num of plugin')
+    parser.add_argument('--hp_plugins', default=[{'mem_size':2000}, {'ewc_lambda': 0.001}], help='hyper-parameter for plugin. it\'s len is must same with num of plugin')
     parser.add_argument('--strategy', type=str, default='Naive')
     parser.add_argument('--hp_strategy', default=None)
 

@@ -33,24 +33,40 @@ import datetime
 import time
 from pathlib import Path
 from typing import List
+import sys
 
 import timm
 import torch
 import torchvision.models
 from torch.nn import CrossEntropyLoss
-from torch.optim import SGD
+from torch.optim import SGD, Adam, Adagrad
 
 from avalanche.core import SupervisedPlugin
 from avalanche.evaluation.metrics import accuracy_metrics, loss_metrics, timing_metrics, confusion_matrix_metrics
 from avalanche.logging import InteractiveLogger, TensorboardLogger, WandBLogger, TextLogger
 from avalanche.training.plugins import EvaluationPlugin, ReplayPlugin, EWCPlugin
-from avalanche.training.supervised import Naive
+from avalanche.training.supervised import *
 from devkit_tools.benchmarks import challenge_classification_benchmark
 from devkit_tools.metrics.classification_output_exporter import \
     ClassificationOutputExporter
 
 from utils.utils import *
 from data import transformation
+
+def get_optimizer(args, model):
+    if args.optim == 'SGD':
+        optimizer = torch.optim.SGD([{'params': model.parameters(), 'lr': args.lr}],
+                                    momentum=0.9, nesterov=True, weight_decay=args.decay)
+    else:
+        raise NotImplementedError
+
+    # if args.schedule == 'Step':
+    #     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step, gamma=args.gamma)
+    # elif args.schedule == 'Milestone':
+    #     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.milestones,
+    #                                                      gamma=args.gamma)
+
+    return optimizer
 
 def main(args):
     # --- TRANSFORMATIONS
@@ -76,20 +92,18 @@ def main(args):
 
     # --- PLUGINS CREATION  https://avalanche-api.continualai.org/en/latest/training.html#training-plugins
     mandatory_plugins = [ClassificationOutputExporter(benchmark, save_folder=result_path)]
-    plugins: List[SupervisedPlugin] = [
-        ReplayPlugin(mem_size=args.mem_size),
-        EWCPlugin(ewc_lambda=args.ewc_lambda)
-    ] + mandatory_plugins
+    plugin = []
+    plugins = [getattr(sys.modules[__name__], p)(**args.hp_plugins[idx]) for idx, p in enumerate(args.plugins)] + mandatory_plugins
 
     # --- METRICS AND LOGGING
     evaluator = EvaluationPlugin(
         accuracy_metrics(epoch=True, stream=True, experience=True),
         loss_metrics(minibatch=False, epoch_running=True, experience=True),
-        confusion_matrix_metrics(stream=True),
+        confusion_matrix_metrics(stream=True, wandb=True),
         timing_metrics(experience=True, stream=True),
         loggers=[InteractiveLogger(),
                  TensorboardLogger(tb_log_dir='./results/tblog/track_inst_cls/exp_' + datetime.datetime.now().isoformat()),
-                 WandBLogger(project_name='clvision-track1', run_name=name, save_code=False, sync_tfboard=True, dir='./results/'),
+                 WandBLogger(project_name=args.project_name, run_name=name, save_code=False, sync_tfboard=True, dir='./results/'),
                  TextLogger(open('./results/txtlog/'+ name+ datetime.datetime.now().isoformat() + '.txt', 'a'))],)
 
     """
@@ -111,21 +125,16 @@ def main(args):
     #  the methods required to implement your solution.
     """
 
-    #todo add scheduler (multistep lr)
-    optimizer = SGD(model.parameters(), lr=0.001, momentum=0.9)
+    optimizer = get_optimizer(args, model)
 
-    cl_strategy = Naive( #todo change strategy
-        model,
-        optimizer,
-        CrossEntropyLoss(),
-        train_mb_size=args.train_batch,
-        train_epochs=args.epoch,
-        eval_mb_size=args.test_batch,
-        device=args.device,
-        plugins=plugins,
-        evaluator=evaluator,
-        eval_every=0 if 'valid' in benchmark.streams else -1
-    )
+    eval_tmp = 0 if 'valid' in benchmark.streams else -1
+    strategy_args = {'model': model, 'optimizer': optimizer, 'criterion': CrossEntropyLoss(),
+                     'train_mb_size':args.train_batch, 'train_epochs':args.epoch, 'eval_mb_size':args.test_batch,
+                     'device': args.device, 'plugins': plugins, 'evaluator': evaluator, 'eval_every':eval_tmp}
+    if args.hp_strategy:
+        cl_strategy = getattr(sys.modules[__name__], args.strategy)(**strategy_args, **args.hp_strategy)
+    else:
+        cl_strategy = getattr(sys.modules[__name__], args.strategy)(**strategy_args)
 
     # TRAINING LOOP
     for experience in benchmark.train_stream:
@@ -152,11 +161,13 @@ def main(args):
                 **data_loader_arguments)
 
         print("Training completed")
-        print('This task takes %d seconds' % (time.time() - start_time),
-              '\nstill need around %.2f mins to finish this session' % (
-                      (time.time() - start_time) * (14 - current_experience_id) / 60))
+
 
         print("Computing accuracy on the complete test set")
         cl_strategy.eval(benchmark.test_stream, num_workers=10,
                          persistent_workers=True)
+
+        print('This task takes %d seconds' % (time.time() - start_time),
+              '\nstill need around %.2f mins to finish this session' % (
+                      (time.time() - start_time) * (14 - current_experience_id) / 60))
 

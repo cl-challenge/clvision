@@ -33,47 +33,44 @@ import datetime
 import time
 from pathlib import Path
 from typing import List
+import sys
 
+import timm
 import torch
 import torchvision.models
 from torch.nn import CrossEntropyLoss
-from torch.optim import SGD
-from torchvision import transforms
-from torchvision.transforms import ToTensor, RandomCrop
+from torch.optim import SGD, Adam, Adagrad
 
-from avalanche.benchmarks.utils import Compose
 from avalanche.core import SupervisedPlugin
-from avalanche.evaluation.metrics import accuracy_metrics, loss_metrics, \
-    timing_metrics
+from avalanche.evaluation.metrics import accuracy_metrics, loss_metrics, timing_metrics, confusion_matrix_metrics
 from avalanche.logging import InteractiveLogger, TensorboardLogger, WandBLogger, TextLogger
 from avalanche.training.plugins import EvaluationPlugin, ReplayPlugin, EWCPlugin
-from avalanche.training.supervised import Naive
+from avalanche.training.supervised import *
 from devkit_tools.benchmarks import challenge_classification_benchmark
 from devkit_tools.metrics.classification_output_exporter import \
     ClassificationOutputExporter
 
 from utils.utils import *
+from data import transformation
+
+def get_optimizer(args, model):
+    if args.optim == 'SGD':
+        optimizer = torch.optim.SGD([{'params': model.parameters(), 'lr': args.lr}],
+                                    momentum=0.9, nesterov=True, weight_decay=args.decay)
+    else:
+        raise NotImplementedError
+
+    # if args.schedule == 'Step':
+    #     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step, gamma=args.gamma)
+    # elif args.schedule == 'Milestone':
+    #     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.milestones,
+    #                                                      gamma=args.gamma)
+
+    return optimizer
 
 def main(args):
     # --- TRANSFORMATIONS
-    # This is the normalization used in torchvision models
-    # https://pytorch.org/vision/stable/models.html
-    torchvision_normalization = transforms.Normalize(
-        mean=[0.485,  0.456, 0.406],
-        std=[0.229, 0.224, 0.225])
-
-    # Add additional transformations here
-    train_transform = Compose(
-        [RandomCrop(224, padding=10, pad_if_needed=True),
-         ToTensor(),
-         torchvision_normalization]
-    )
-
-    # Don't add augmentation transforms to the eval transformations!
-    eval_transform = Compose(
-        [ToTensor(), torchvision_normalization]
-    )
-    # ---------
+    train_transform, eval_transform = transformation() #todo 추후 data augmentation관련 parameter transform argument 인자로 전달
 
     # --- BENCHMARK CREATION
     benchmark = challenge_classification_benchmark(
@@ -82,62 +79,34 @@ def main(args):
         eval_transform=eval_transform,
         n_validation_videos=0
     )
-    # ---------
 
-    # --- exp name
+    # --- EXP NAME CREATION
     name = exp_name(args)
-    # ---------
+    result_path = './results/instance_classification_results/{}'.format(name)
+    ensure_path(result_path)
 
     # --- MODEL CREATION
-    model = torchvision.models.resnet34(pretrained=True)
-    model.fc = torch.nn.Linear(512, out_features=benchmark.n_classes)
-    # ---------
+    model = timm.create_model(args.model, pretrained=args.use_pretrain)
+    model.fc = torch.nn.Linear(model.fc.in_features, out_features=benchmark.n_classes)
 
-    # For the challenge, you'll have to implement your own strategy (or a
-    # strategy plugin that changes the behaviour of the SupervisedTemplate)
 
-    # --- PLUGINS CREATION
-    # Avalanche already has a lot of plugins you can use!
-    # Many mainstream continual learning approaches are available as plugins:
-    # https://avalanche-api.continualai.org/en/latest/training.html#training-plugins
-    ensure_path('./results/instance_classification_results/{}'.format(name))
-    mandatory_plugins = [
-        ClassificationOutputExporter(
-            benchmark, save_folder='./results/instance_classification_results/{}'.format(name))
-    ]
-    plugins: List[SupervisedPlugin] = [
-        ReplayPlugin(mem_size=args.mem_size),
-        EWCPlugin(ewc_lambda=args.ewc_lambda)
-    ] + mandatory_plugins
-    # ---------
+    # --- PLUGINS CREATION  https://avalanche-api.continualai.org/en/latest/training.html#training-plugins
+    mandatory_plugins = [ClassificationOutputExporter(benchmark, save_folder=result_path)]
+    plugin = []
+    plugins = [getattr(sys.modules[__name__], p)(**args.hp_plugins[idx]) for idx, p in enumerate(args.plugins)] + mandatory_plugins
 
     # --- METRICS AND LOGGING
     evaluator = EvaluationPlugin(
-        accuracy_metrics(
-            epoch=True,
-            stream=True
-        ),
-        loss_metrics(
-            minibatch=False,
-            epoch_running=True
-        ),
-        # May be useful if using a validation stream
-        # confusion_matrix_metrics(stream=True),
-        timing_metrics(
-            experience=True, stream=True
-        ),
+        accuracy_metrics(epoch=True, stream=True, experience=True),
+        loss_metrics(minibatch=False, epoch_running=True, experience=True),
+        confusion_matrix_metrics(stream=True, wandb=True),
+        timing_metrics(experience=True, stream=True),
         loggers=[InteractiveLogger(),
-                 TensorboardLogger(
-                     tb_log_dir='./results/tblog/track_inst_cls/exp_' +
-                                datetime.datetime.now().isoformat()),
-                 WandBLogger(project_name='clvision-track1', run_name=name, save_code=False, sync_tfboard=True, dir='./results/'),
-                 TextLogger(open('./results/txtlog/'+ name+
-                                 datetime.datetime.now().isoformat() + '.txt', 'a'))
+                 TensorboardLogger(tb_log_dir='./results/tblog/track_inst_cls/exp_' + datetime.datetime.now().isoformat()),
+                 WandBLogger(project_name=args.project_name, run_name=name, save_code=False, sync_tfboard=True, dir='./results/'),
+                 TextLogger(open('./results/txtlog/'+ name+ datetime.datetime.now().isoformat() + '.txt', 'a'))],)
 
-                 ],
-    )
-    # ---------
-
+    """
     # --- CREATE THE STRATEGY INSTANCE
     # In Avalanche, you can customize the training loop in 3 ways:
     #   1. Adapt the make_train_dataloader, make_optimizer, forward,
@@ -154,35 +123,27 @@ def main(args):
     #  In particular, you can create a subclass of the SupervisedTemplate
     #  (Naive is mostly an alias for the SupervisedTemplate) and override only
     #  the methods required to implement your solution.
-    #todo add scheduler (multistep lr)
-    optimizer = SGD(model.parameters(), lr=0.001, momentum=0.9)
+    """
 
-    cl_strategy = Naive(
-        model,
-        optimizer,
-        CrossEntropyLoss(),
-        train_mb_size=args.train_batch,
-        train_epochs=args.epoch,
-        eval_mb_size=args.test_batch,
-        device=args.device,
-        plugins=plugins,
-        evaluator=evaluator,
-        eval_every=0 if 'valid' in benchmark.streams else -1
-    )
-    # ---------
+    optimizer = get_optimizer(args, model)
+
+    eval_tmp = 0 if 'valid' in benchmark.streams else -1
+    strategy_args = {'model': model, 'optimizer': optimizer, 'criterion': CrossEntropyLoss(),
+                     'train_mb_size':args.train_batch, 'train_epochs':args.epoch, 'eval_mb_size':args.test_batch,
+                     'device': args.device, 'plugins': plugins, 'evaluator': evaluator, 'eval_every':eval_tmp}
+    if args.hp_strategy:
+        cl_strategy = getattr(sys.modules[__name__], args.strategy)(**strategy_args, **args.hp_strategy)
+    else:
+        cl_strategy = getattr(sys.modules[__name__], args.strategy)(**strategy_args)
 
     # TRAINING LOOP
-    print("Starting experiment...")
     for experience in benchmark.train_stream:
         start_time = time.time()
         current_experience_id = experience.current_experience
         print("Start of experience: ", current_experience_id)
         print("Current Classes: ", experience.classes_in_this_experience)
 
-        data_loader_arguments = dict(
-            num_workers=10,
-            persistent_workers=True
-        )
+        data_loader_arguments = dict(num_workers=10, persistent_workers=True)
 
         if 'valid' in benchmark.streams:
             # Each validation experience is obtained from the training
@@ -198,12 +159,15 @@ def main(args):
             cl_strategy.train(
                 experience,
                 **data_loader_arguments)
+
         print("Training completed")
-        print('This task takes %d seconds' % (time.time() - start_time),
-              '\nstill need around %.2f mins to finish this session' % (
-                      (time.time() - start_time) * (14 - current_experience_id) / 60))
+
 
         print("Computing accuracy on the complete test set")
         cl_strategy.eval(benchmark.test_stream, num_workers=10,
                          persistent_workers=True)
+
+        print('This task takes %d seconds' % (time.time() - start_time),
+              '\nstill need around %.2f mins to finish this session' % (
+                      (time.time() - start_time) * (14 - current_experience_id) / 60))
 

@@ -185,14 +185,14 @@ if __name__ == '__main__':
     from torch.utils.data import DataLoader
     from torchvision.transforms import ToTensor, Resize, Compose
 
-    sample_root: Path = Path.home() / '3rd_clvision_challenge' / 'demo_dataset'
-    show_images = True
-    try_loading = False
-    train = True
+    # sample_root: Path = Path.home() / '3rd_clvision_challenge' / 'demo_dataset'
+    show_images = False
+    try_loading = True
+    train = False
     instance_level = True
 
     sample_classification_dataset = ChallengeClassificationDataset(
-        root=sample_root,
+        root='/home/miil/Dataset/clvision',
         train=train,
         bbox_margin=20,
         instance_level=instance_level

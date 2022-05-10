@@ -44,29 +44,37 @@ from torch.optim import SGD, Adam, Adagrad
 from avalanche.core import SupervisedPlugin
 from avalanche.evaluation.metrics import accuracy_metrics, loss_metrics, timing_metrics, confusion_matrix_metrics
 from avalanche.logging import InteractiveLogger, TensorboardLogger, WandBLogger, TextLogger
-from avalanche.training.plugins import EvaluationPlugin, ReplayPlugin, EWCPlugin
+from avalanche.training.plugins import EvaluationPlugin, ReplayPlugin, EWCPlugin, LRSchedulerPlugin
 from avalanche.training.supervised import *
 from devkit_tools.benchmarks import challenge_classification_benchmark
 from devkit_tools.metrics.classification_output_exporter import \
     ClassificationOutputExporter
+from devkit_tools.plugins.model_checkpoint import *
 
 from utils.utils import *
 from data import transformation
 
 def get_optimizer(args, model):
     if args.optim == 'SGD':
-        optimizer = torch.optim.SGD([{'params': model.parameters(), 'lr': args.lr}],
+        optimizer = torch.optim.SGD([{'params': model.layer1.parameters(), 'lr': args.lr_base},
+                                     {'params': model.layer2.parameters(), 'lr': args.lr_base},
+                                     {'params': model.layer3.parameters(), 'lr': args.lr_base},
+                                     {'params': model.layer4.parameters(), 'lr': args.lr_base},
+                                     {'params': model.fc.parameters(), 'lr': args.lr_cf},
+                                     ],
                                     momentum=0.9, nesterov=True, weight_decay=args.decay)
     else:
         raise NotImplementedError
 
-    # if args.schedule == 'Step':
-    #     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step, gamma=args.gamma)
-    # elif args.schedule == 'Milestone':
-    #     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.milestones,
-    #                                                      gamma=args.gamma)
+    if args.schedule == 'Step':
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step, gamma=args.gamma)
+    elif args.schedule == 'Milestone':
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.milestones,
+                                                         gamma=args.gamma)
+    else:
+        raise NotImplementedError
 
-    return optimizer
+    return optimizer, scheduler
 
 def main(args):
     # --- TRANSFORMATIONS
@@ -77,7 +85,8 @@ def main(args):
         dataset_path=args.data_path,
         train_transform=train_transform,
         eval_transform=eval_transform,
-        n_validation_videos=0
+        n_validation_videos=args.use_val,
+        validation_video_selection_seed=args.seed
     )
 
     # --- EXP NAME CREATION
@@ -88,12 +97,15 @@ def main(args):
     # --- MODEL CREATION
     model = timm.create_model(args.model, pretrained=args.use_pretrain)
     model.fc = torch.nn.Linear(model.fc.in_features, out_features=benchmark.n_classes)
+    optimizer, scheduler = get_optimizer(args, model)
 
 
     # --- PLUGINS CREATION  https://avalanche-api.continualai.org/en/latest/training.html#training-plugins
     mandatory_plugins = [ClassificationOutputExporter(benchmark, save_folder=result_path)]
-    plugin = []
-    plugins = [getattr(sys.modules[__name__], p)(**args.hp_plugins[idx]) for idx, p in enumerate(args.plugins)] + mandatory_plugins
+    lr_plugin = [LRSchedulerPlugin(scheduler, step_granularity='epoch')]
+    algo_plugin = [getattr(sys.modules[__name__], p)(**args.hp_plugins[idx]) for idx, p in enumerate(args.plugins)]
+
+    plugins = algo_plugin + lr_plugin + mandatory_plugins
 
     # --- METRICS AND LOGGING
     evaluator = EvaluationPlugin(
@@ -125,12 +137,10 @@ def main(args):
     #  the methods required to implement your solution.
     """
 
-    optimizer = get_optimizer(args, model)
 
-    eval_tmp = 0 if 'valid' in benchmark.streams else -1
     strategy_args = {'model': model, 'optimizer': optimizer, 'criterion': CrossEntropyLoss(),
                      'train_mb_size':args.train_batch, 'train_epochs':args.epoch, 'eval_mb_size':args.test_batch,
-                     'device': args.device, 'plugins': plugins, 'evaluator': evaluator, 'eval_every':eval_tmp}
+                     'device': args.device, 'plugins': plugins, 'evaluator': evaluator, 'eval_every':args.eval_every}
     if args.hp_strategy:
         cl_strategy = getattr(sys.modules[__name__], args.strategy)(**strategy_args, **args.hp_strategy)
     else:
@@ -159,9 +169,9 @@ def main(args):
             cl_strategy.train(
                 experience,
                 **data_loader_arguments)
+        # cl_strategy.save()
 
         print("Training completed")
-
 
         print("Computing accuracy on the complete test set")
         cl_strategy.eval(benchmark.test_stream, num_workers=10,

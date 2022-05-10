@@ -11,23 +11,28 @@ def get_command_line_parser():
     parser.add_argument('--exp', type=int, default=1, choices=[1, 2, 3], help='which track run')
     parser.add_argument('--model', type=str, default='resnet34', help='model name for calling timm') # https://rwightman.github.io/pytorch-image-models/models/
     parser.add_argument('--use_pretrain', type=str2bool, default=True)
+    parser.add_argument('--use_val', type=int, default=0)
+    parser.add_argument('--eval_every', type=int, default=-1)
 
     # instance classification parameter
     # ------------------------------------------------
     parser.add_argument('--epoch', type=int, default=10)
-    parser.add_argument('--schedule', type=str, default='Step', choices=['Step', 'Milestone'])
-    parser.add_argument('--milestones', nargs='+', type=int, default=[60, 70])
+    parser.add_argument('--schedule', type=str, default='Milestone', choices=['Step', 'Milestone'])
+    parser.add_argument('--milestones', nargs='+', type=int, default=[80, 160])
     parser.add_argument('--step', type=int, default=40)
     parser.add_argument('--decay', type=float, default=0.0002)
     parser.add_argument('--optim', type=str, default='SGD')
     parser.add_argument('--lr', type=float, default=0.005)
+    parser.add_argument('--lr_base', type=float, default=0.001)
+    parser.add_argument('--lr_cf', type=float, default=0.01)
+    parser.add_argument('--gamma', type=float, default=0.1)
     parser.add_argument('--train_batch', type=int, default=256)
     parser.add_argument('--test_batch', type=int, default=256)
 
     # use avalanche parameter
     # ------------------------------------------------
-    parser.add_argument('--plugins', default=['ReplayPlugin', 'EWCPlugin'], help='use exact name for calling plugin in avalanche') # https://avalanche-api.continualai.org/en/latest/training.html#training-plugins
-    parser.add_argument('--hp_plugins', default=[{'mem_size':2000}, {'ewc_lambda': 0.001}], help='hyper-parameter for plugin. it\'s len is must same with num of plugin')
+    parser.add_argument('--plugins', nargs='+', default=['ReplayPlugin', 'EWCPlugin'], help='use exact name for calling plugin in avalanche') # https://avalanche-api.continualai.org/en/latest/training.html#training-plugins
+    parser.add_argument('--hp_plugins', nargs='+', default=[{'mem_size':2000}, {'ewc_lambda': 0.001}], help='hyper-parameter for plugin. it\'s len is must same with num of plugin')
     parser.add_argument('--strategy', type=str, default='Naive')
     parser.add_argument('--hp_strategy', default=None)
 

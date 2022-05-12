@@ -29,9 +29,6 @@ def transformation():
     return train_transform, eval_transform
 
 
-
-
-
 if __name__ == "__main__":
     import torch
     import torchvision

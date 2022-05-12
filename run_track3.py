@@ -3,6 +3,7 @@ from utils.utils import *
 
 
 def get_command_line_parser():
+    
     parser = argparse.ArgumentParser()
 
     # benchmark parameter

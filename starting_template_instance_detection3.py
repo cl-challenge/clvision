@@ -317,6 +317,7 @@ def main(args):
 	momentum = 0.9
 	weight_decay = 1e-5
 	
+	
 	model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
 		pretrained=True)
 	

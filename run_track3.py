@@ -34,7 +34,7 @@ def get_command_line_parser():
     # etc option
     # ------------------------------------------------
     parser.add_argument('--gpu', default='0')
-    parser.add_argument('--num_workers', type=int, default=-1)
+    parser.add_argument('--num_workers', type=int, default=20)
     parser.add_argument('--seed', default=1)
     parser.add_argument('--memo', default=None, help='memo for experiment explanation')
     parser.add_argument('--project_name', default='clvision-debug', help='wandb project name')
@@ -60,7 +60,7 @@ if __name__ == '__main__':
     elif args.exp == 2:
         importlib.import_module('starting_template_category_detection').main(args)
     elif args.exp == 3:
-        importlib.import_module('starting_template_instance_detection').main(args)
+        importlib.import_module('starting_template_instance_detection3').main(args)
     else:
         raise ValueError
 

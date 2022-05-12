@@ -62,3 +62,21 @@ def exp_name(args):
         name += '{}'.format(args.memo)
 
     return name
+
+
+def exp_name_track3(args):
+    #TODO add plugin or strategy information
+    #TODO add lr scheduler information
+    name = f'{args.exp_name}'
+    name += '{}-'.format(args.model)
+    name += 'Epo_{}-'.format(args.epoch)
+    name += 'Optim_{}-'.format(args.optim)
+    name += 'Lr_{}-'.format(args.lr)
+    name += 'Sch_{}-'.format(args.schedule)
+    name += 'Bs_{}_{}-'.format(args.train_batch, args.test_batch)
+    name += 'Seed_{}-'.format(args.seed)
+
+    if args.memo:
+        name += '{}'.format(args.memo)
+
+    return name

@@ -130,9 +130,16 @@ def main(args):
 	params = [p for p in model.parameters() if p.requires_grad]
 	optimizer = torch.optim.SGD(params, lr=0.005,
 										 momentum=0.9, weight_decay=1e-5)
+	if args.schedule == 'Step':
+		scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step, gamma=args.gamma)
+	elif args.schedule == 'Milestone':
+		scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.milestones,
+																		 gamma=args.gamma)
+	
+	
 	
 	# Define the scheduler
-	train_mb_size = 4
+	train_mb_size = args.train_batch
 	
 	# When using LinearLR, the LR will start from optimizer.lr / start_factor
 	# (here named warmup_factor) and will then increase after each call to
@@ -236,7 +243,7 @@ def main(args):
 	# ---------
 	
 	data_loader_arguments = dict(
-		num_workers=10,
+		num_workers=-1,
 		persistent_workers=True
 	)
 	if args.type == "tune":
@@ -320,7 +327,7 @@ def main(args):
 	params = [p for p in model.parameters() if p.requires_grad]
 	optimizer = torch.optim.SGD(params,
 										 lr=lr, momentum=momentum, weight_decay=1e-5)
-	train_mb_size = 4
+	train_mb_size = args.train_batch
 	
 	warmup_factor = 1.0 / 1000
 	warmup_iters = \
@@ -331,9 +338,9 @@ def main(args):
 	cl_strategy = ObjectDetectionTemplate(
 		model=model,
 		optimizer=optimizer,
-		train_mb_size=4,
+		train_mb_size=args.train_batch,
 		train_epochs=args.epoch,
-		eval_mb_size=4,
+		eval_mb_size=args.test_batch,
 		device=torch.device("cuda"),
 		plugins=plugins,
 		evaluator=evaluator,
@@ -354,5 +361,5 @@ def main(args):
 		print('This task takes %d seconds' % (time.time() - start_time))
 		
 		print("Computing accuracy on the full test set")
-		cl_strategy.eval(benchmark.test_stream, num_workers=10,
+		cl_strategy.eval(benchmark.test_stream, num_workers=-1,
 							  persistent_workers=True)

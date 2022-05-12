@@ -15,14 +15,14 @@ def get_command_line_parser():
     # instance classification parameter
     # ------------------------------------------------
     parser.add_argument('--epoch', type=int, default=10)
-    parser.add_argument('--schedule', type=str, default='Step', choices=['Step', 'Milestone'])
+    parser.add_argument('--schedule', type=str, default='Linear', choices=['Step', 'Milestone','Linear'])
     parser.add_argument('--milestones', nargs='+', type=int, default=[60, 70])
     parser.add_argument('--step', type=int, default=40)
     parser.add_argument('--decay', type=float, default=0.0002)
     parser.add_argument('--optim', type=str, default='SGD')
     parser.add_argument('--lr', type=float, default=0.005)
-    parser.add_argument('--train_batch', type=int, default=256)
-    parser.add_argument('--test_batch', type=int, default=256)
+    parser.add_argument('--train_batch', type=int, default=4)
+    parser.add_argument('--test_batch', type=int, default=4)
 
     # use avalanche parameter
     # ------------------------------------------------

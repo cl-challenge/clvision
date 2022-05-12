@@ -48,6 +48,7 @@ def get_command_line_parser():
     return parser
 
 if __name__ == '__main__':
+    print("track3 임진혁 수정 중인 brunch 맞다용")
     args = get_command_line_parser().parse_args()
     set_seed(args.seed)
     pprint(vars(args))

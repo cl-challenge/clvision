@@ -184,7 +184,7 @@ def main(args):
 	# --- METRICS AND LOGGING
 	mandatory_metrics = [
 		make_ego_objects_metrics(
-			save_folder=f'.{args.exp_name}/instance_detection_results',
+			save_folder=f'{args.exp_name}/instance_detection_results',
 			filename_prefix='track3_output')]
 	
 	evaluator = EvaluationPlugin(
@@ -243,7 +243,7 @@ def main(args):
 	# ---------
 	
 	data_loader_arguments = dict(
-		num_workers=-1,
+		num_workers=args.num_workers,
 		persistent_workers=True
 	)
 	if args.type == "tune":
@@ -317,6 +317,7 @@ def main(args):
 	momentum = 0.9
 	weight_decay = 1e-5
 	
+	
 	model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
 		pretrained=True)
 	
@@ -361,5 +362,5 @@ def main(args):
 		print('This task takes %d seconds' % (time.time() - start_time))
 		
 		print("Computing accuracy on the full test set")
-		cl_strategy.eval(benchmark.test_stream, num_workers=-1,
+		cl_strategy.eval(benchmark.test_stream, num_workers=args.num_workers,
 							  persistent_workers=True)

@@ -14,20 +14,25 @@ def get_command_line_parser():
     parser.add_argument('--use_val', type=int, default=0)
     parser.add_argument('--eval_every', type=int, default=-1)
 
-    # instance classification parameter
-    # ------------------------------------------------
     parser.add_argument('--epoch', type=int, default=10)
     parser.add_argument('--schedule', type=str, default='Milestone', choices=['Step', 'Milestone'])
     parser.add_argument('--milestones', nargs='+', type=int, default=[80, 160])
     parser.add_argument('--step', type=int, default=40)
     parser.add_argument('--decay', type=float, default=0.0002)
     parser.add_argument('--optim', type=str, default='SGD')
-    parser.add_argument('--lr', type=float, default=0.005)
-    parser.add_argument('--lr_base', type=float, default=0.001)
-    parser.add_argument('--lr_cf', type=float, default=0.01)
     parser.add_argument('--gamma', type=float, default=0.1)
     parser.add_argument('--train_batch', type=int, default=256)
     parser.add_argument('--test_batch', type=int, default=256)
+
+
+    # instance classification parameter
+    # ------------------------------------------------
+    parser.add_argument('--lr_base', type=float, default=0.001)
+    parser.add_argument('--lr_cf', type=float, default=0.01)
+
+    # instance detection parameter
+    # ------------------------------------------------
+    parser.add_argument('--lr', type=float, default=0.005)
 
     # use avalanche parameter
     # ------------------------------------------------

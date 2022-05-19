@@ -1,3 +1,7 @@
 [submodule "avalanche"]
 	path = avalanche
 	url = https://github.com/ContinualAI/avalanche
+
+[submodule "cutmix"]
+	path = cutmix
+	url = https://github.com/cl-challenge/cutmix

@@ -52,7 +52,9 @@ from devkit_tools.metrics.classification_output_exporter import \
 from devkit_tools.plugins.model_checkpoint import *
 
 from utils.utils import *
-from data import transformation
+from data import transformation, CutMix
+from utils.cutmix_utils import *
+
 
 def get_optimizer(args, model):
     if args.optim == 'SGD':
@@ -136,9 +138,12 @@ def main(args):
     #  (Naive is mostly an alias for the SupervisedTemplate) and override only
     #  the methods required to implement your solution.
     """
+    if args.use_cutmix:
+        criterion = CutMixCrossEntropyLoss(True)
+    else:
+        criterion = CrossEntropyLoss()
 
-
-    strategy_args = {'model': model, 'optimizer': optimizer, 'criterion': CrossEntropyLoss(),
+    strategy_args = {'model': model, 'optimizer': optimizer, 'criterion': criterion,
                      'train_mb_size':args.train_batch, 'train_epochs':args.epoch, 'eval_mb_size':args.test_batch,
                      'device': args.device, 'plugins': plugins, 'evaluator': evaluator, 'eval_every':args.eval_every}
     if args.hp_strategy:

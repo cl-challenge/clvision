@@ -29,6 +29,7 @@ def get_command_line_parser():
     # ------------------------------------------------
     parser.add_argument('--lr_base', type=float, default=0.001)
     parser.add_argument('--lr_cf', type=float, default=0.01)
+    parser.add_argument('--use_cutmix', type=str2bool, default=False)
 
     # instance detection parameter
     # ------------------------------------------------
@@ -36,8 +37,8 @@ def get_command_line_parser():
 
     # use avalanche parameter
     # ------------------------------------------------
-    parser.add_argument('--plugins', nargs='+', default=['ReplayPlugin', 'EWCPlugin'], help='use exact name for calling plugin in avalanche') # https://avalanche-api.continualai.org/en/latest/training.html#training-plugins
-    parser.add_argument('--hp_plugins', nargs='+', default=[{'mem_size':2000}, {'ewc_lambda': 0.001}], help='hyper-parameter for plugin. it\'s len is must same with num of plugin')
+    parser.add_argument('--plugins', nargs='+', default=['ReplayPlugin'], help='use exact name for calling plugin in avalanche') # https://avalanche-api.continualai.org/en/latest/training.html#training-plugins
+    parser.add_argument('--hp_plugins', nargs='+', default=[{'mem_size':2000}], help='hyper-parameter for plugin. it\'s len is must same with num of plugin')
     parser.add_argument('--strategy', type=str, default='Naive')
     parser.add_argument('--hp_strategy', default=None)
 

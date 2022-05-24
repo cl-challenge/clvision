@@ -44,7 +44,7 @@ from torch.optim import SGD, Adam, Adagrad
 from avalanche.core import SupervisedPlugin
 from avalanche.evaluation.metrics import accuracy_metrics, loss_metrics, timing_metrics, confusion_matrix_metrics
 from avalanche.logging import InteractiveLogger, TensorboardLogger, WandBLogger, TextLogger
-from avalanche.training.plugins import EvaluationPlugin, ReplayPlugin, EWCPlugin, LRSchedulerPlugin
+from avalanche.training.plugins import *
 from avalanche.training.supervised import *
 from devkit_tools.benchmarks import challenge_classification_benchmark
 from devkit_tools.metrics.classification_output_exporter import \
@@ -54,6 +54,8 @@ from devkit_tools.plugins.model_checkpoint import *
 from utils.utils import *
 from data import transformation, CutMix
 from utils.cutmix_utils import *
+from utils.custom_plugin import *
+# from avalanche.models.dynamic_optimizers import
 
 
 def get_optimizer(args, model):
@@ -65,6 +67,8 @@ def get_optimizer(args, model):
                                      {'params': model.fc.parameters(), 'lr': args.lr_cf},
                                      ],
                                     momentum=0.9, nesterov=True, weight_decay=args.decay)
+
+
     else:
         raise NotImplementedError
 
@@ -104,20 +108,29 @@ def main(args):
 
     # --- PLUGINS CREATION  https://avalanche-api.continualai.org/en/latest/training.html#training-plugins
     mandatory_plugins = [ClassificationOutputExporter(benchmark, save_folder=result_path)]
-    lr_plugin = [LRSchedulerPlugin(scheduler, step_granularity='epoch')]
-    algo_plugin = [getattr(sys.modules[__name__], p)(**args.hp_plugins[idx]) for idx, p in enumerate(args.plugins)]
+    utils_plugin = [LRSchedulerPlugin(scheduler, step_granularity='epoch'),
+                    ModelCheckpoint(result_path, 'params'),
+                    EvalMode()
+                    ]
+    # algo_plugin = [getattr(sys.modules[__name__], p)(**args.hp_plugins[idx]) for idx, p in enumerate(args.plugins)]
+    algo_plugin = [
+        # EWCPlugin(ewc_lambda=0.4),
+        # ReplayPlugin(mem_size=2000)
+        GEMPlugin(patterns_per_experience=256, memory_strength=0.5),
+        SynapticIntelligencePlugin()
+    ]
 
-    plugins = algo_plugin + lr_plugin + mandatory_plugins
+    plugins = algo_plugin + utils_plugin + mandatory_plugins
 
     # --- METRICS AND LOGGING
     evaluator = EvaluationPlugin(
         accuracy_metrics(epoch=True, stream=True, experience=True),
         loss_metrics(minibatch=False, epoch_running=True, experience=True),
-        confusion_matrix_metrics(stream=True, wandb=True),
+        # confusion_matrix_metrics(stream=True),
         timing_metrics(experience=True, stream=True),
         loggers=[InteractiveLogger(),
                  TensorboardLogger(tb_log_dir='./results/tblog/track_inst_cls/exp_' + datetime.datetime.now().isoformat()),
-                 WandBLogger(project_name=args.project_name, run_name=name, save_code=False, sync_tfboard=True, dir='./results/'),
+                 # WandBLogger(project_name=args.project_name, run_name=name, save_code=False, sync_tfboard=True, dir='./results/'),
                  TextLogger(open('./results/txtlog/'+ name+ datetime.datetime.now().isoformat() + '.txt', 'a'))],)
 
     """
@@ -133,7 +146,7 @@ def main(args):
     #  -------------
     #  Consider that popular strategies (EWC, LwF, Replay) are implemented
     #  as plugins. However, writing a plugin from scratch may be a tad
-    #  tedious. For the challenge, we recommend going with the 1st option.
+    #  tedious. For the challenge, we recommend going with the 1st option. 
     #  In particular, you can create a subclass of the SupervisedTemplate
     #  (Naive is mostly an alias for the SupervisedTemplate) and override only
     #  the methods required to implement your solution.
@@ -143,13 +156,35 @@ def main(args):
     else:
         criterion = CrossEntropyLoss()
 
-    strategy_args = {'model': model, 'optimizer': optimizer, 'criterion': criterion,
-                     'train_mb_size':args.train_batch, 'train_epochs':args.epoch, 'eval_mb_size':args.test_batch,
-                     'device': args.device, 'plugins': plugins, 'evaluator': evaluator, 'eval_every':args.eval_every}
-    if args.hp_strategy:
-        cl_strategy = getattr(sys.modules[__name__], args.strategy)(**strategy_args, **args.hp_strategy)
-    else:
-        cl_strategy = getattr(sys.modules[__name__], args.strategy)(**strategy_args)
+
+    # MAKE STRATEGY
+    if args.strategy == 'Naive':
+        strategy_args = {'model': model, 'optimizer': optimizer, 'criterion': criterion,
+                         'train_mb_size':args.train_batch, 'train_epochs':args.epoch, 'eval_mb_size':args.test_batch,
+                         'device': args.device, 'plugins': plugins, 'evaluator': evaluator, 'eval_every':args.eval_every}
+        if args.hp_strategy:
+            cl_strategy = getattr(sys.modules[__name__], args.strategy)(**strategy_args, **args.hp_strategy)
+        else:
+            cl_strategy = getattr(sys.modules[__name__], args.strategy)(**strategy_args)
+    elif args.strategy == 'ICaRL': # Not used
+        # model.features
+        # model.classifier 되는지 확인
+        encoder = [{'params': model.layer1.parameters()}, {'params': model.layer2.parameters()},
+                   {'params': model.layer3.parameters()}, {'params': model.layer4.parameters()}]
+        fc = model.fc.parameters()
+        cl_strategy = ICaRL(feature_extractor=encoder, classifier=fc, criterion=criterion, optimizer=optimizer,
+                            memory_size=100, buffer_transform=train_transform, fixed_memory=False)
+    elif args.strategy == 'EWC':
+        cl_strategy = EWC(
+            model, optimizer, criterion, ewc_lambda=0.4, mode="online", decay_factor=0.1, train_mb_size=args.train_batch,
+            eval_mb_size=args.test_batch, train_epochs=args.epoch, device=args.device, plugins = plugins, evaluator=evaluator,
+            eval_every=args.eval_every
+        )
+    elif args.strategy == 'Cumulative':
+        cl_strategy = Cumulative(
+            model, optimizer, criterion, train_mb_size=args.train_batch, eval_mb_size=args.test_batch, train_epochs=args.epoch,
+            device=args.device, plugins = plugins, evaluator=evaluator, eval_every=args.eval_every
+        )
 
     # TRAINING LOOP
     for experience in benchmark.train_stream:
@@ -157,6 +192,11 @@ def main(args):
         current_experience_id = experience.current_experience
         print("Start of experience: ", current_experience_id)
         print("Current Classes: ", experience.classes_in_this_experience)
+
+        if args.use_cutmix:
+            trgt = torch.tensor(list(experience.dataset.targets))
+            unique_targets, targets_count = torch.unique(trgt, return_counts=True)
+            experience.dataset = CutMix(experience.dataset, len(unique_targets), num_mix=2, beta=1.0, prob=0.5)
 
         data_loader_arguments = dict(num_workers=10, persistent_workers=True)
 

@@ -44,7 +44,7 @@ class CutMix(Dataset):
         self.prob = prob
 
     def __getitem__(self, index):
-        img, lb = self.dataset[index]
+        img, lb, tasklb = self.dataset[index]
         lb_onehot = onehot(self.num_class, lb)
 
         for _ in range(self.num_mix):
@@ -56,7 +56,7 @@ class CutMix(Dataset):
             lam = np.random.beta(self.beta, self.beta)
             rand_index = random.choice(range(len(self)))
 
-            img2, lb2 = self.dataset[rand_index]
+            img2, lb2, tasklb2 = self.dataset[rand_index]
             lb2_onehot = onehot(self.num_class, lb2)
 
             bbx1, bby1, bbx2, bby2 = rand_bbox(img.size(), lam)

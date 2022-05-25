@@ -39,9 +39,6 @@ import timm
 import torch
 import torchvision.models
 from torch.nn import CrossEntropyLoss
-from torch.optim import SGD, Adam, Adagrad
-
-from avalanche.core import SupervisedPlugin
 from avalanche.evaluation.metrics import accuracy_metrics, loss_metrics, timing_metrics, confusion_matrix_metrics
 from avalanche.logging import InteractiveLogger, TensorboardLogger, WandBLogger, TextLogger
 from avalanche.training.plugins import *
@@ -54,7 +51,7 @@ from devkit_tools.plugins.model_checkpoint import *
 from utils.utils import *
 from data import transformation, CutMix
 from utils.cutmix_utils import *
-from utils.custom_plugin import *
+from utils.custom_plugin import EvalMode, CutMixPlugin
 # from avalanche.models.dynamic_optimizers import
 
 
@@ -117,7 +114,7 @@ def main(args):
         # EWCPlugin(ewc_lambda=0.4),
         # ReplayPlugin(mem_size=2000)
         GEMPlugin(patterns_per_experience=256, memory_strength=0.5),
-        SynapticIntelligencePlugin()
+        # SynapticIntelligencePlugin()
     ]
 
     plugins = algo_plugin + utils_plugin + mandatory_plugins
@@ -153,6 +150,9 @@ def main(args):
     """
     if args.use_cutmix:
         criterion = CutMixCrossEntropyLoss(True)
+        plugins += [
+            CutMixPlugin(benchmark.n_classes, num_mix=2, beta=1.0, prob=0.5)
+        ]
     else:
         criterion = CrossEntropyLoss()
 
@@ -192,11 +192,6 @@ def main(args):
         current_experience_id = experience.current_experience
         print("Start of experience: ", current_experience_id)
         print("Current Classes: ", experience.classes_in_this_experience)
-
-        if args.use_cutmix:
-            trgt = torch.tensor(list(experience.dataset.targets))
-            unique_targets, targets_count = torch.unique(trgt, return_counts=True)
-            experience.dataset = CutMix(experience.dataset, len(unique_targets), num_mix=2, beta=1.0, prob=0.5)
 
         data_loader_arguments = dict(num_workers=10, persistent_workers=True)
 

@@ -49,7 +49,7 @@ from devkit_tools.metrics.classification_output_exporter import \
 from devkit_tools.plugins.model_checkpoint import *
 
 from utils.utils import *
-from data import transformation, CutMix
+from utils.data import transformation
 from utils.cutmix_utils import *
 from utils.custom_plugin import EvalMode, CutMixPlugin
 # from avalanche.models.dynamic_optimizers import
@@ -81,7 +81,7 @@ def get_optimizer(args, model):
 
 def main(args):
     # --- TRANSFORMATIONS
-    train_transform, eval_transform = transformation() #todo 추후 data augmentation관련 parameter transform argument 인자로 전달
+    train_transform, eval_transform = transformation()
 
     # --- BENCHMARK CREATION
     benchmark = challenge_classification_benchmark(
@@ -106,8 +106,6 @@ def main(args):
     # --- PLUGINS CREATION  https://avalanche-api.continualai.org/en/latest/training.html#training-plugins
     mandatory_plugins = [ClassificationOutputExporter(benchmark, save_folder=result_path)]
     utils_plugin = [LRSchedulerPlugin(scheduler, step_granularity='epoch'),
-                    ModelCheckpoint(result_path, 'params'),
-                    EvalMode()
                     ]
     # algo_plugin = [getattr(sys.modules[__name__], p)(**args.hp_plugins[idx]) for idx, p in enumerate(args.plugins)]
     algo_plugin = [
@@ -118,6 +116,8 @@ def main(args):
     ]
 
     plugins = algo_plugin + utils_plugin + mandatory_plugins
+    if not args.use_bn:
+        plugins += [EvalMode()]
 
     # --- METRICS AND LOGGING
     evaluator = EvaluationPlugin(
@@ -126,9 +126,10 @@ def main(args):
         # confusion_matrix_metrics(stream=True),
         timing_metrics(experience=True, stream=True),
         loggers=[InteractiveLogger(),
-                 TensorboardLogger(tb_log_dir='./results/tblog/track_inst_cls/exp_' + datetime.datetime.now().isoformat()),
+                 # TensorboardLogger(tb_log_dir='./results/tblog/track_inst_cls/exp_' + datetime.datetime.now().isoformat()),
                  # WandBLogger(project_name=args.project_name, run_name=name, save_code=False, sync_tfboard=True, dir='./results/'),
-                 TextLogger(open('./results/txtlog/'+ name+ datetime.datetime.now().isoformat() + '.txt', 'a'))],)
+                 # TextLogger(open('./results/txtlog/'+ name+ datetime.datetime.now().isoformat() + '.txt', 'a'))
+                 ],)
 
     """
     # --- CREATE THE STRATEGY INSTANCE
@@ -185,6 +186,10 @@ def main(args):
             model, optimizer, criterion, train_mb_size=args.train_batch, eval_mb_size=args.test_batch, train_epochs=args.epoch,
             device=args.device, plugins = plugins, evaluator=evaluator, eval_every=args.eval_every
         )
+    elif args.strategy == 'AGEM':
+        pass
+    else:
+        raise NotImplementedError
 
     # TRAINING LOOP
     for experience in benchmark.train_stream:
@@ -196,11 +201,6 @@ def main(args):
         data_loader_arguments = dict(num_workers=10, persistent_workers=True)
 
         if 'valid' in benchmark.streams:
-            # Each validation experience is obtained from the training
-            # experience directly. We can't use the whole validation stream
-            # (because that means accessing future or past data).
-            # For this reason, validation is done only on
-            # `valid_stream[current_experience_id]`.
             cl_strategy.train(
                 experience,
                 eval_streams=[benchmark.valid_stream[current_experience_id]],

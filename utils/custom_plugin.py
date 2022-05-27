@@ -53,7 +53,7 @@ class CutMixPlugin(SupervisedPlugin):
                 rand_index = random.choice(range(length))
 
                 img2, lb2 = strategy.mb_x[rand_index], strategy.mb_y[rand_index]
-                lb2_onehot = onehot(self.num_class, lb2).to(self.device)
+                lb2_onehot = self.onehot(self.num_class, lb2).to(self.device)
 
                 bbx1, bby1, bbx2, bby2 = self.rand_bbox(img.size(), lam)
                 img[:, bbx1:bbx2, bby1:bby2] = img2[:, bbx1:bbx2, bby1:bby2]

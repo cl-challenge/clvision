@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import torch
 import torch.nn as nn
 from avalanche.core import SupervisedPlugin, Template
@@ -5,6 +6,11 @@ import numpy as np
 import random
 from utils.cutmix_utils import onehot, rand_bbox
 
+=======
+import torch.nn as nn
+from avalanche.core import SupervisedPlugin, Template
+from data import CutMix
+>>>>>>> 1d5f88f831f770b9383b19c7b20d0b70ed391ca9
 
 class EvalMode(SupervisedPlugin):
     def __init__(self, start_exp=1):
@@ -28,12 +34,17 @@ class EvalMode(SupervisedPlugin):
 
 
 class CutMixPlugin(SupervisedPlugin):
+<<<<<<< HEAD
     def __init__(self, num_class, beta, prob, num_mix, device='cuda'):
+=======
+    def __init__(self, num_class, beta, prob, num_mix):
+>>>>>>> 1d5f88f831f770b9383b19c7b20d0b70ed391ca9
         super().__init__()
         self.num_class = num_class
         self.beta = beta
         self.prob = prob
         self.num_mix = num_mix
+<<<<<<< HEAD
         self.device = device
 
     def before_training_iteration(self, strategy: Template, *args, **kwargs):
@@ -70,4 +81,16 @@ class CutMixPlugin(SupervisedPlugin):
 __all__ = [
     'EvalMode',
     'CutMixPlugin'
+=======
+
+    def train_dataset_adaptation(self, **kwargs):
+        self.adapted_dataset = CutMix(self.experience.dataset, num_class=self.num_class, beta=self.beta, prob=self.prob,
+                                      num_mix=self.num_mix)
+        self.adapted_dataset.current_transform_group = 'train'
+
+    # def after_train_dataset_adaptation(self, s):
+
+__all__ = [
+    'EvalMode'
+>>>>>>> 1d5f88f831f770b9383b19c7b20d0b70ed391ca9
 ]

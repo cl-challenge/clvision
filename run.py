@@ -30,6 +30,7 @@ def get_command_line_parser():
     parser.add_argument('--lr_base', type=float, default=0.001)
     parser.add_argument('--lr_cf', type=float, default=0.01)
     parser.add_argument('--use_cutmix', type=str2bool, default=False)
+    parser.add_argument('--use_bn', type=str2bool, default=True)
 
     # instance detection parameter
     # ------------------------------------------------
